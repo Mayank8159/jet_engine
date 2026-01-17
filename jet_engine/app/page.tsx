@@ -1,69 +1,65 @@
-"use client";
+"use client"
+import { useState } from "react"
+import SingleEngine from "@/components/dashboard/SingleEngine"
+import FleetDashboard from "@/components/dashboard/FleetDashboard"
+import { PredictionResult } from "@/types/prediction"
 
-import React, { useState } from "react";
-import { getRULPrediction } from "../services/rulService";
-import { PredictionResponse } from "../types/rul";
-
-const SEQ_LEN = 30;
-const NUM_FEATURES = 24; // 🔥 MUST MATCH TRAINING
-
-function generateWindow(): number[][] {
-  return Array.from({ length: SEQ_LEN }, () =>
-    Array.from({ length: NUM_FEATURES }, () =>
-      Number(Math.random().toFixed(4))
-    )
-  );
+// -------------------
+// Helper: Safe Status
+// -------------------
+const statuses = ["Healthy", "Warning", "Critical"] as const
+type Status = (typeof statuses)[number]
+function randomStatus(): Status {
+  return statuses[Math.floor(Math.random() * statuses.length)]
 }
 
-export default function RulDashboard() {
-  const [prediction, setPrediction] = useState<PredictionResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+// -------------------
+// Demo fleet generator
+// -------------------
+const generateDemoFleet = (count: number) =>
+  Array.from({ length: count }, (_, i) => ({
+    engineId: `ENG_${i + 1}`,
+    data: {
+      predicted_rul: Math.floor(Math.random() * 125),
+      health_percent: Math.floor(Math.random() * 100),
+      health_grade: "A",
+      status: randomStatus(),
+      risk_score: Math.random(),
+      confidence: Math.random(),
+      maintenance_action: "Check Soon",
+      time_to_failure: { min: 10, max: 50 },
+      maintenance_cost: { preventive: 12000, reactive: 48000, savings: 36000 },
+      top_sensors: [
+        { sensor: "T24", impact: 0.3 },
+        { sensor: "Nf", impact: 0.2 },
+      ],
+      rul_history: Array.from({ length: 10 }, () => Math.floor(Math.random() * 125)),
+    } as PredictionResult,
+  }))
 
-  const handlePredict = async () => {
-    setLoading(true);
-    try {
-      const window = generateWindow();
-      const result = await getRULPrediction(window);
-      setPrediction(result);
-    } catch (err) {
-      console.error(err);
-      alert("Prediction failed. Check backend logs.");
-    }
-    setLoading(false);
-  };
+// -------------------
+// Page Component
+// -------------------
+export default function Page() {
+  const [fleet, setFleet] = useState(generateDemoFleet(6))
+  const [showFleet, setShowFleet] = useState(false)
 
   return (
-    <div className="p-8 max-w-xl mx-auto bg-white shadow rounded">
-      <h1 className="text-2xl font-bold mb-6">
-        Jet Engine Remaining Useful Life
-      </h1>
+    <main className="min-h-screen p-6 bg-gradient-to-br from-black to-slate-900 text-white space-y-6">
+      <h1 className="text-3xl font-bold">Jet Engine Predictive Dashboard</h1>
 
       <button
-        onClick={handlePredict}
-        disabled={loading}
-        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400"
+        onClick={() => setShowFleet(!showFleet)}
+        className="py-2 px-4 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 font-bold hover:scale-105 transition-transform"
       >
-        {loading ? "Analyzing..." : "Predict RUL"}
+        {showFleet ? "Show Single Engine View" : "Show Fleet View"}
       </button>
 
-      {prediction && (
-        <div className="mt-6 p-4 bg-gray-50 rounded">
-          <p className="text-sm text-gray-500">Predicted RUL</p>
-          <p className="text-4xl font-bold">
-            {prediction.predicted_rul} cycles
-          </p>
-
-          <span
-            className={`inline-block mt-2 px-3 py-1 rounded-full text-sm font-semibold ${
-              prediction.status === "Healthy"
-                ? "bg-green-100 text-green-800"
-                : "bg-red-100 text-red-800"
-            }`}
-          >
-            {prediction.status}
-          </span>
-        </div>
+      {showFleet ? (
+        <FleetDashboard fleet={fleet} />
+      ) : (
+        <SingleEngine />
       )}
-    </div>
-  );
+    </main>
+  )
 }
