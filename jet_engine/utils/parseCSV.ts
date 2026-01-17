@@ -1,33 +1,13 @@
-export function parseSensorCSV(
-  raw: string,
-  rows = 30,
-  cols = 24
-): number[][] {
-  const lines = raw
+export const parseSensorCSV = (text: string): number[][] => {
+  return text
     .trim()
     .split("\n")
-    .map(l => l.trim())
-    .filter(Boolean)
-
-  if (lines.length !== rows) {
-    throw new Error(`Expected ${rows} rows, got ${lines.length}`)
-  }
-
-  const matrix = lines.map((line, rowIdx) => {
-    const values = line.split(",").map(v => Number(v.trim()))
-
-    if (values.length !== cols) {
-      throw new Error(
-        `Row ${rowIdx + 1}: expected ${cols} values, got ${values.length}`
-      )
-    }
-
-    if (values.some(v => Number.isNaN(v))) {
-      throw new Error(`Row ${rowIdx + 1}: contains invalid number`)
-    }
-
-    return values
-  })
-
-  return matrix
-}
+    .filter(line => line.trim() !== "") // Removes empty lines that cause 422
+    .map((line) => {
+      const parts = line.split(",").filter(v => v.trim() !== ""); // Ignore trailing commas
+      return parts.map(v => {
+        const n = parseFloat(v.trim());
+        return isNaN(n) ? 0 : n;
+      });
+    });
+};

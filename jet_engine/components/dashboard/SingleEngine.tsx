@@ -24,16 +24,22 @@ export default function SingleEngine() {
     setLoading(true)
 
     try {
-      // ✅ CORRECT PARSING (FIXES 30×1 BUG)
+      // ✅ Parses text and cleans up whitespace/empty lines
       const dataWindow = parseSensorCSV(sensorData)
 
-      console.log("Parsed shape:", dataWindow.length, dataWindow[0].length)
+      console.log("Parsed shape:", dataWindow.length, dataWindow[0]?.length)
+
+      if (dataWindow.length !== 30 || dataWindow[0]?.length !== 24) {
+        throw new Error(`Invalid Shape: Got ${dataWindow.length}x${dataWindow[0]?.length}. Need 30x24.`);
+      }
 
       const result = await predictRUL(dataWindow, engineId || undefined)
       setPrediction(result)
     } catch (err: any) {
-      console.error(err)
-      alert(err.message || "Prediction failed")
+      console.error("Prediction Error:", err)
+      // If backend returns a [object Object], this extracts the message
+      const msg = typeof err.message === 'object' ? JSON.stringify(err.message) : err.message;
+      alert(msg || "Prediction failed. Check backend logs.");
     } finally {
       setLoading(false)
     }
@@ -52,85 +58,92 @@ export default function SingleEngine() {
         <button
           onClick={handlePredict}
           disabled={loading}
-          className="w-full py-3 mt-2 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-600 text-white font-bold hover:scale-105 transition-transform duration-200"
+          className="w-full py-3 mt-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold hover:scale-[1.02] active:scale-95 transition-all duration-200 disabled:opacity-50"
         >
-          {loading ? "Analyzing..." : "Predict RUL"}
+          {loading ? "Analyzing Telemetry..." : "Predict RUL"}
         </button>
       </GlassCard>
 
       {prediction && (
         <GlassCard>
-          <h2 className="text-xl font-bold mb-2">
-            Engine: {engineId || "Unknown"}
+          <h2 className="text-xl font-bold mb-4">
+            Analysis Results: {engineId || "System Default"}
           </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <p className="text-sm text-gray-300">
-                Remaining Useful Life (RUL)
-              </p>
-              <p className="text-3xl font-bold">
-                {prediction.predicted_rul} cycles
-              </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Left Column: RUL & Health */}
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-gray-400">Remaining Useful Life (RUL)</p>
+                <p className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400">
+                  {prediction.predicted_rul} <span className="text-lg font-normal text-gray-500">cycles</span>
+                </p>
+              </div>
 
-              <p className="text-sm text-gray-300 mt-2">Health</p>
-              <p className="text-xl font-semibold">
-                {prediction.health_percent}%
-              </p>
-
-              <span
-                className={`inline-block mt-2 px-3 py-1 rounded-full text-sm font-semibold ${
-                  prediction.status === "Healthy"
-                    ? "bg-green-100 text-green-800"
-                    : prediction.status === "Warning"
-                    ? "bg-yellow-100 text-yellow-800"
-                    : "bg-red-100 text-red-800"
-                }`}
-              >
-                {prediction.status}
-              </span>
+              <div>
+                <p className="text-sm text-gray-400">Health Index</p>
+                <div className="flex items-center gap-3">
+                  <p className="text-2xl font-semibold">{prediction.health_percent}%</p>
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                      prediction.status === "Healthy"
+                        ? "bg-green-500/20 text-green-400 border border-green-500/50"
+                        : prediction.status === "Warning"
+                        ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/50"
+                        : "bg-red-500/20 text-red-400 border border-red-500/50"
+                    }`}
+                  >
+                    {prediction.status}
+                  </span>
+                </div>
+              </div>
 
               {prediction.status !== "Healthy" && (
-                <div className="mt-2 p-2 rounded bg-red-50 border border-red-200 text-red-700 text-sm">
-                  ⚠️ {prediction.maintenance_action}
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex gap-2 items-start">
+                  <span>⚠️</span>
+                  <span>{prediction.maintenance_action || "Inspection recommended."}</span>
                 </div>
               )}
             </div>
 
+            {/* Right Column: Chart */}
             <div>
-              <p className="text-sm text-gray-300 mb-1">
-                Degradation Trend
-              </p>
-              <MiniRULChart rulHistory={prediction.rul_history} />
+              <p className="text-sm text-gray-400 mb-2">Degradation Trend</p>
+              <div className="h-32 w-full">
+                <MiniRULChart rulHistory={prediction.rul_history || []} />
+              </div>
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-300">
-            <div>
-              <p>Risk Score</p>
-              <p className="font-semibold">{prediction.risk_score}</p>
+          <hr className="my-6 border-white/10" />
+
+          {/* Metrics Footer */}
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="p-2 rounded-lg bg-white/5">
+              <p className="text-[10px] uppercase text-gray-500">Risk Score</p>
+              <p className="font-mono font-bold text-white">{prediction.risk_score || "0.0"}</p>
             </div>
-            <div>
-              <p>Confidence</p>
-              <p className="font-semibold">{prediction.confidence}</p>
+            <div className="p-2 rounded-lg bg-white/5">
+              <p className="text-[10px] uppercase text-gray-500">Confidence</p>
+              <p className="font-mono font-bold text-white">{prediction.confidence || "N/A"}</p>
             </div>
-            <div>
-              <p>Health Grade</p>
-              <p className="font-semibold">{prediction.health_grade}</p>
+            <div className="p-2 rounded-lg bg-white/5">
+              <p className="text-[10px] uppercase text-gray-500">Grade</p>
+              <p className="font-mono font-bold text-white">{prediction.health_grade || "-"}</p>
             </div>
           </div>
 
-          <div className="mt-4">
-            <p className="text-sm text-gray-300 mb-1">
-              Top Sensor Impacts
-            </p>
-            <ul className="list-disc list-inside">
-              {prediction.top_sensors.map((s, i) => (
-                <li key={i}>
-                  {s.sensor}: {Math.round(s.impact * 100)}%
-                </li>
+          {/* Sensor Impact List */}
+          <div className="mt-6">
+            <p className="text-sm text-gray-400 mb-3 font-medium">Top Contributing Factors</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {(prediction.top_sensors || []).map((s, i) => (
+                <div key={i} className="flex justify-between items-center p-2 rounded bg-black/20 border border-white/5">
+                  <span className="text-xs text-blue-400 font-bold">{s.sensor}</span>
+                  <span className="text-xs text-white">{(s.impact * 100).toFixed(0)}%</span>
+                </div>
               ))}
-            </ul>
+            </div>
           </div>
         </GlassCard>
       )}

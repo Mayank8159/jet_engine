@@ -1,6 +1,7 @@
 "use client"
 
-import { Database, FileJson, Trash2, CheckCircle2, AlertCircle } from "lucide-react"
+import React, { useMemo } from "react"
+import { Database, FileJson, Trash2, CheckCircle2, AlertCircle, Wand2 } from "lucide-react"
 
 interface Props {
   raw: string
@@ -8,22 +9,48 @@ interface Props {
 }
 
 export default function SensorTextarea({ raw, setRaw }: Props) {
-  // Parsing logic for real-time stats
-  const rows = raw.trim() ? raw.trim().split("\n") : []
+  // --- Robust Parsing Logic ---
+  // We filter out empty lines to ensure trailing newlines don't break the row count
+  const rows = useMemo(() => {
+    return raw.trim() ? raw.trim().split("\n").filter(line => line.trim() !== "") : []
+  }, [raw])
+
   const rowCount = rows.length
-  const colCount = rows[0] ? rows[0].split(",").length : 0
   
+  // We split the first row and filter out empty segments to get an accurate sensor count
+  const colCount = useMemo(() => {
+    if (rows.length === 0) return 0
+    return rows[0].split(",").filter(val => val.trim() !== "").length
+  }, [rows])
+
   const isValid = rowCount === 30 && colCount === 24
 
+  // --- Handlers ---
+  
+  // Generates exactly 30 rows of 24 sensors
   const fillDemoData = () => {
     const rowsArr = 30
     const colsArr = 24
     const csv = Array.from({ length: rowsArr }, () =>
       Array.from({ length: colsArr }, () =>
-        (Math.random() * 400 + 10).toFixed(2)
+        (Math.random() * 390 + 10).toFixed(2)
       ).join(",")
     ).join("\n")
     setRaw(csv)
+  }
+
+  // Handy feature: If a user pastes 720 values as one long line, this breaks them into 30x24
+  const autoFormat = () => {
+    const allValues = raw.split(/[,\s\n]+/).filter(v => v.trim() !== "")
+    if (allValues.length === 720) {
+      const formatted: string[] = []
+      for (let i = 0; i < 720; i += 24) {
+        formatted.push(allValues.slice(i, i + 24).join(","))
+      }
+      setRaw(formatted.join("\n"))
+    } else {
+      alert(`Auto-format requires exactly 720 values. Found: ${allValues.length}`)
+    }
   }
 
   return (
@@ -38,6 +65,19 @@ export default function SensorTextarea({ raw, setRaw }: Props) {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Auto-Format Action (Hidden if already valid) */}
+          {!isValid && raw.length > 100 && (
+            <button
+              type="button"
+              onClick={autoFormat}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/20 transition-all"
+              title="Reshape flat data to 30x24"
+            >
+              <Wand2 size={14} />
+              Repair Shape
+            </button>
+          )}
+
           <button
             type="button"
             onClick={fillDemoData}

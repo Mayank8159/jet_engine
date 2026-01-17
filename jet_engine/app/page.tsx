@@ -1,85 +1,86 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Activity, Users, ShieldCheck } from "lucide-react"
+import { useState, useEffect, useCallback } from "react"
+import { ShieldCheck, RefreshCw } from "lucide-react"
 import SingleEngine from "@/components/dashboard/SingleEngine"
 import FleetDashboard from "@/components/dashboard/FleetDashboard"
-import { generateDemoFleet } from "@/utils/mockData" // Import from utils
+import { generateDemoFleet } from "@/utils/mockData"
 
 export default function Page() {
-  // Use a null or empty state initially to prevent SSR/Hydration mismatch errors
   const [fleet, setFleet] = useState<any[]>([])
   const [showFleet, setShowFleet] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(false)
 
-  // Standard Industry Pattern: Generate data on mount
+  const fetchEnginePrediction = async (engineId: string) => {
+    try {
+      // Create valid mock input: 30 time steps of 24 sensors
+      const mockInput = Array(30).fill(0).map(() => 
+        Array(24).fill(0).map(() => Math.random() * 0.4 + 0.1)
+      );
+
+      // Using 127.0.0.1 to avoid DNS resolution issues
+      const response = await fetch("http://127.0.0.1:8000/predict", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: mockInput }),
+      });
+
+      if (!response.ok) throw new Error("Connection Refused");
+      
+      const result = await response.json();
+
+      setFleet((prev) =>
+        prev.map((eng) =>
+          eng.engineId === engineId ? { ...eng, data: result } : eng
+        )
+      );
+    } catch (error) {
+      console.error(`Sync error for ${engineId}:`, error);
+    }
+  };
+
+  const syncAll = useCallback(async () => {
+    setIsSyncing(true);
+    await Promise.all(fleet.map(eng => fetchEnginePrediction(eng.engineId)));
+    setIsSyncing(false);
+  }, [fleet]);
+
   useEffect(() => {
-    setFleet(generateDemoFleet(6))
-  }, [])
+    const initial = generateDemoFleet(6);
+    setFleet(initial);
+    // Trigger initial fetch
+    initial.forEach((eng: any) => fetchEnginePrediction(eng.engineId));
+  }, []);
 
   return (
-    <main className="relative min-h-screen w-full bg-[#050507] text-slate-200 font-sans">
-      {/* BACKGROUND SYSTEM */}
-      <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
-        <div className="absolute inset-0 bg-[#050507]" />
-        <div 
-          className="absolute inset-0 opacity-[0.1]" 
-          style={{ 
-            backgroundImage: `linear-gradient(#1e293b 1px, transparent 1px), linear-gradient(90deg, #1e293b 1px, transparent 1px)`,
-            backgroundSize: '40px 40px' 
-          }} 
-        />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,#050507_90%)]" />
-      </div>
+    <main className="relative min-h-screen bg-[#050507] text-slate-200 p-6">
+      {/* Background Effect */}
+      <div className="fixed inset-0 opacity-[0.05] pointer-events-none bg-[grid-white/10]" 
+           style={{ backgroundImage: 'radial-gradient(circle, #1e293b 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
 
-      <div className="relative z-10 max-w-[1440px] mx-auto p-6 space-y-8">
-        {/* HEADER */}
-        <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 border-b border-white/5 pb-8">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 text-blue-400 mb-1">
-              <ShieldCheck size={16} className="animate-pulse" />
-              <span className="text-[10px] font-black uppercase tracking-[0.4em]">Propulsion Intelligence Terminal</span>
+      <div className="relative z-10 max-w-7xl mx-auto space-y-8">
+        <header className="flex justify-between items-center border-b border-white/5 pb-6">
+          <div>
+            <div className="flex items-center gap-2 text-blue-400 text-[10px] font-bold uppercase tracking-widest">
+              <ShieldCheck size={14} className={isSyncing ? "animate-spin" : ""} />
+              Live Telemetry Active
             </div>
-            <h1 className="text-4xl font-black tracking-tighter uppercase italic text-white">
-              Aero<span className="text-blue-500">Guard</span> Dashboard
-            </h1>
+            <h1 className="text-3xl font-black italic uppercase">Aero<span className="text-blue-500">Guard</span></h1>
           </div>
 
-          {/* VIEW SWITCHER */}
-          <div className="flex p-1 bg-white/5 border border-white/10 rounded-xl backdrop-blur-md">
-            <button
-              onClick={() => setShowFleet(false)}
-              className={`px-6 py-2 rounded-lg text-xs font-bold transition-all ${
-                !showFleet ? "bg-blue-600 text-white shadow-lg" : "text-gray-500 hover:text-white"
-              }`}
-            >
-              DIAGNOSTICS
+          <div className="flex gap-4 items-center">
+            <button onClick={syncAll} className="p-2 bg-white/5 rounded-lg hover:bg-white/10">
+              <RefreshCw size={18} className={isSyncing ? "animate-spin" : ""} />
             </button>
-            <button
-              onClick={() => setShowFleet(true)}
-              className={`px-6 py-2 rounded-lg text-xs font-bold transition-all ${
-                showFleet ? "bg-blue-600 text-white shadow-lg" : "text-gray-500 hover:text-white"
-              }`}
-            >
-              FLEET VIEW
-            </button>
+            <div className="bg-white/5 p-1 rounded-xl flex border border-white/10">
+              <button onClick={() => setShowFleet(false)} className={`px-4 py-2 rounded-lg text-xs font-bold ${!showFleet ? "bg-blue-600" : ""}`}>DIAGNOSTICS</button>
+              <button onClick={() => setShowFleet(true)} className={`px-4 py-2 rounded-lg text-xs font-bold ${showFleet ? "bg-blue-600" : ""}`}>FLEET VIEW</button>
+            </div>
           </div>
         </header>
 
-        {/* CONTENT */}
-        <section className="min-h-[60vh]">
-          {showFleet ? (
-            <FleetDashboard fleet={fleet} />
-          ) : (
-            <SingleEngine />
-          )}
-        </section>
-
-        {/* FOOTER */}
-        <footer className="pt-8 border-t border-white/5 flex justify-between items-center text-[10px] text-gray-600 font-mono uppercase tracking-widest">
-          <span>&copy; 2026 AeroGuard Dynamics</span>
-          <span>System Status: <span className="text-emerald-500">Optimal</span></span>
-        </footer>
+        <section>{showFleet ? <FleetDashboard fleet={fleet} /> : <SingleEngine />}</section>
       </div>
     </main>
-  )
+  );
 }

@@ -1,15 +1,38 @@
 "use client"
 
-import { MoreHorizontal, AlertOctagon, Activity, Gauge, Clock } from "lucide-react"
+import { useState, useEffect } from "react"
+import { MoreHorizontal, AlertOctagon, Activity, Gauge, Clock, Loader2 } from "lucide-react"
 import GlassCard from "../layout/GlassCard"
 import MiniRULChart from "../charts/MiniRULChart"
 import { PredictionResult } from "@/types/prediction"
 
 interface Props {
-  fleet: { engineId: string; data: PredictionResult }[]
+  fleet: { engineId: string; data?: PredictionResult }[]
 }
 
 export default function FleetDashboard({ fleet }: Props) {
+  const [mounted, setMounted] = useState(false)
+
+  // Fix for Hydration Mismatch: Ensure component only renders 
+  // interactive parts after mounting on the client.
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Safely calculate counts for the summary header
+  const criticalCount = fleet.filter(e => e.data?.status === "Critical").length;
+  const warningCount = fleet.filter(e => e.data?.status === "Warning").length;
+
+  if (!mounted) return null; // Prevent hydration flash
+
+  if (!fleet || fleet.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64 border border-dashed border-white/10 rounded-xl">
+        <p className="text-gray-500 animate-pulse font-mono">Initializing fleet telemetry...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Fleet Summary Header */}
@@ -21,29 +44,41 @@ export default function FleetDashboard({ fleet }: Props) {
         <div className="flex gap-2">
           <div className="px-3 py-1 bg-rose-500/10 border border-rose-500/20 rounded-md">
             <span className="text-[10px] block uppercase font-bold text-rose-400">Critical</span>
-            <span className="text-lg font-mono font-bold text-white">
-              {fleet.filter(e => e.data.status === "Critical").length}
-            </span>
+            <span className="text-lg font-mono font-bold text-white">{criticalCount}</span>
           </div>
           <div className="px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-md">
             <span className="text-[10px] block uppercase font-bold text-amber-400">Warning</span>
-            <span className="text-lg font-mono font-bold text-white">
-              {fleet.filter(e => e.data.status === "Warning").length}
-            </span>
+            <span className="text-lg font-mono font-bold text-white">{warningCount}</span>
           </div>
         </div>
       </div>
 
       {/* Main Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-        {fleet.map((engine) => {
-          const { data } = engine;
+        {fleet.map((engine, index) => {
+          // Unique key priority: engineId > index
+          const cardKey = engine.engineId || `engine-idx-${index}`;
+          const { data, engineId } = engine;
+
+          // State 1: Data is still loading for this engine
+          if (!data) {
+            return (
+              <GlassCard key={cardKey} className="flex flex-col items-center justify-center h-80 opacity-60">
+                <Loader2 className="w-6 h-6 text-blue-500 animate-spin mb-3" />
+                <p className="text-[10px] text-gray-500 font-mono uppercase tracking-widest">
+                  Syncing {engineId}...
+                </p>
+              </GlassCard>
+            );
+          }
+
+          // State 2: Data loaded successfully
           const isCritical = data.status === "Critical";
           const isWarning = data.status === "Warning";
 
           return (
             <GlassCard 
-              key={engine.engineId} 
+              key={cardKey} 
               className={`relative overflow-hidden group transition-all duration-300 hover:border-white/30 ${
                 isCritical ? "border-l-4 border-l-rose-500" : 
                 isWarning ? "border-l-4 border-l-amber-500" : "border-l-4 border-l-emerald-500"
@@ -56,8 +91,8 @@ export default function FleetDashboard({ fleet }: Props) {
                     <Activity className={`w-4 h-4 ${isCritical ? "text-rose-400" : "text-blue-400"}`} />
                   </div>
                   <div>
-                    <h3 className="font-mono font-bold text-white tracking-wider">{engine.engineId}</h3>
-                    <p className="text-[10px] text-gray-500 uppercase font-semibold">MTU-Series 4000</p>
+                    <h3 className="font-mono font-bold text-white tracking-wider">{engineId}</h3>
+                    <p className="text-[10px] text-gray-500 uppercase font-semibold tracking-tighter">MTU-Series 4000</p>
                   </div>
                 </div>
                 <button className="text-gray-600 hover:text-white transition-colors">
@@ -112,7 +147,7 @@ export default function FleetDashboard({ fleet }: Props) {
                   {data.status}
                 </div>
                 <span className="text-[10px] text-gray-600 font-mono italic">
-                  Last Sync: 2m ago
+                  Last Sync: 1m ago
                 </span>
               </div>
             </GlassCard>
