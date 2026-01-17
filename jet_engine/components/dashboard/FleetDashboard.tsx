@@ -1,4 +1,6 @@
 "use client"
+
+import { MoreHorizontal, AlertOctagon, Activity, Gauge, Clock } from "lucide-react"
 import GlassCard from "../layout/GlassCard"
 import MiniRULChart from "../charts/MiniRULChart"
 import { PredictionResult } from "@/types/prediction"
@@ -9,30 +11,114 @@ interface Props {
 
 export default function FleetDashboard({ fleet }: Props) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {fleet.map((engine) => {
-        const data = engine.data
-        const statusColor =
-          data.status === "Healthy"
-            ? "bg-green-100 text-green-800"
-            : data.status === "Warning"
-            ? "bg-yellow-100 text-yellow-800"
-            : "bg-red-100 text-red-800"
+    <div className="space-y-6">
+      {/* Fleet Summary Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-1">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-white">Fleet Operations</h2>
+          <p className="text-sm text-gray-500">Monitoring {fleet.length} active propulsion units</p>
+        </div>
+        <div className="flex gap-2">
+          <div className="px-3 py-1 bg-rose-500/10 border border-rose-500/20 rounded-md">
+            <span className="text-[10px] block uppercase font-bold text-rose-400">Critical</span>
+            <span className="text-lg font-mono font-bold text-white">
+              {fleet.filter(e => e.data.status === "Critical").length}
+            </span>
+          </div>
+          <div className="px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-md">
+            <span className="text-[10px] block uppercase font-bold text-amber-400">Warning</span>
+            <span className="text-lg font-mono font-bold text-white">
+              {fleet.filter(e => e.data.status === "Warning").length}
+            </span>
+          </div>
+        </div>
+      </div>
 
-        return (
-          <GlassCard key={engine.engineId}>
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="font-bold">{engine.engineId}</h3>
-              <span className={`px-2 py-1 rounded-full text-sm font-semibold ${statusColor}`}>
-                {data.status}
-              </span>
-            </div>
-            <p className="text-sm">Health: {data.health_percent}%</p>
-            <p className="text-sm">RUL: {data.predicted_rul} cycles</p>
-            <MiniRULChart rulHistory={data.rul_history} />
-          </GlassCard>
-        )
-      })}
+      {/* Main Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+        {fleet.map((engine) => {
+          const { data } = engine;
+          const isCritical = data.status === "Critical";
+          const isWarning = data.status === "Warning";
+
+          return (
+            <GlassCard 
+              key={engine.engineId} 
+              className={`relative overflow-hidden group transition-all duration-300 hover:border-white/30 ${
+                isCritical ? "border-l-4 border-l-rose-500" : 
+                isWarning ? "border-l-4 border-l-amber-500" : "border-l-4 border-l-emerald-500"
+              }`}
+            >
+              {/* Header */}
+              <div className="flex justify-between items-start mb-4">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${isCritical ? "bg-rose-500/10" : "bg-blue-500/10"}`}>
+                    <Activity className={`w-4 h-4 ${isCritical ? "text-rose-400" : "text-blue-400"}`} />
+                  </div>
+                  <div>
+                    <h3 className="font-mono font-bold text-white tracking-wider">{engine.engineId}</h3>
+                    <p className="text-[10px] text-gray-500 uppercase font-semibold">MTU-Series 4000</p>
+                  </div>
+                </div>
+                <button className="text-gray-600 hover:text-white transition-colors">
+                  <MoreHorizontal size={18} />
+                </button>
+              </div>
+
+              {/* Vital Metrics Grid */}
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5 text-gray-500">
+                    <Gauge size={12} />
+                    <span className="text-[10px] uppercase font-bold tracking-tighter">Health Index</span>
+                  </div>
+                  <div className="flex items-end gap-1">
+                    <span className="text-2xl font-bold text-white">{data.health_percent}</span>
+                    <span className="text-xs text-gray-600 pb-1">%</span>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5 text-gray-500">
+                    <Clock size={12} />
+                    <span className="text-[10px] uppercase font-bold tracking-tighter">Est. RUL</span>
+                  </div>
+                  <div className="flex items-end gap-1">
+                    <span className="text-2xl font-bold text-white">{data.predicted_rul}</span>
+                    <span className="text-xs text-gray-600 pb-1">CYC</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Chart Section */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center text-[10px] uppercase font-bold tracking-widest text-gray-500">
+                  <span>Degradation Trend</span>
+                  <span className={isCritical ? "text-rose-400" : "text-emerald-400"}>
+                    {isCritical ? "Rapid Decay" : "Stable"}
+                  </span>
+                </div>
+                <div className="h-24 w-full bg-black/20 rounded-lg p-2">
+                  <MiniRULChart rulHistory={data.rul_history} />
+                </div>
+              </div>
+
+              {/* Status Footer */}
+              <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
+                <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                  isCritical ? "text-rose-400 bg-rose-400/10" : 
+                  isWarning ? "text-amber-400 bg-amber-400/10" : "text-emerald-400 bg-emerald-400/10"
+                }`}>
+                  {isCritical && <AlertOctagon size={10} />}
+                  {data.status}
+                </div>
+                <span className="text-[10px] text-gray-600 font-mono italic">
+                  Last Sync: 2m ago
+                </span>
+              </div>
+            </GlassCard>
+          );
+        })}
+      </div>
     </div>
-  )
+  );
 }

@@ -54,7 +54,7 @@ export default function SingleEngine() {
           disabled={loading}
           className="w-full py-3 mt-2 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-600 text-white font-bold hover:scale-105 transition-transform duration-200"
         >
-          {loading ? "Analyzing..." : "🚀 Predict RUL"}
+          {loading ? "Analyzing..." : "Predict RUL"}
         </button>
       </GlassCard>
 
