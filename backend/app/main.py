@@ -4,7 +4,14 @@ import tensorflow as tf
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Dict
+from typing import List
+
+# =========================
+# CONSTANTS (MATCH TRAINING)
+# =========================
+TIME_STEPS = 30
+NUM_FEATURES = 24
+MAX_RUL = 125.0
 
 # =========================
 # App Initialization
@@ -34,10 +41,7 @@ async def load_model():
         if not os.path.exists(MODEL_PATH):
             raise FileNotFoundError(f"Model not found at {MODEL_PATH}")
 
-        model = tf.keras.models.load_model(
-            MODEL_PATH,
-            compile=False
-        )
+        model = tf.keras.models.load_model(MODEL_PATH, compile=False)
         print(f"✅ LSTM model loaded from {MODEL_PATH}")
 
     except Exception as e:
@@ -48,11 +52,11 @@ async def load_model():
 # Input Schema
 # =========================
 class EngineData(BaseModel):
-    # Shape: [time_steps, num_features]
+    # Expected shape: [30, 24]
     data_window: List[List[float]]
 
 # =========================
-# Health Endpoint
+# Health Check
 # =========================
 @app.get("/health")
 def health():
@@ -71,48 +75,41 @@ async def predict(data: EngineData):
 
     try:
         # -------------------------
-        # Input Processing
+        # Convert input
         # -------------------------
         x = np.array(data.data_window, dtype=np.float32)
 
-        if x.ndim != 2:
-            raise ValueError("Input must be 2D: [time_steps, features]")
+        # -------------------------
+        # STRICT SHAPE VALIDATION
+        # -------------------------
+        if x.shape != (TIME_STEPS, NUM_FEATURES):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Expected input shape (30, 24), got {x.shape}"
+            )
 
-        x = np.expand_dims(x, axis=0)  # (1, T, F)
+        # LSTM expects: (batch, time, features)
+        x = np.expand_dims(x, axis=0)  # (1, 30, 24)
 
         # -------------------------
-        # Model Prediction
+        # Predict RUL
         # -------------------------
         y_pred = model.predict(x, verbose=0)
         rul = float(y_pred[0][0])
 
         # -------------------------
-        # Health Computation
+        # Health Metrics
         # -------------------------
-        MAX_RUL = 125.0
         health_percent = min((rul / MAX_RUL) * 100, 100)
 
-        # -------------------------
-        # Status & Grade
-        # -------------------------
         if health_percent > 70:
-            status = "Healthy"
-            grade = "A"
+            status, grade = "Healthy", "A"
         elif health_percent > 40:
-            status = "Warning"
-            grade = "B"
+            status, grade = "Warning", "B"
         else:
-            status = "Critical"
-            grade = "C"
+            status, grade = "Critical", "C"
 
-        # -------------------------
-        # Risk Score
-        # -------------------------
         risk_score = round(1 - (health_percent / 100), 2)
-
-        # -------------------------
-        # Confidence (mock but valid)
-        # -------------------------
         confidence = round(np.clip(0.75 + (health_percent / 400), 0.75, 0.95), 2)
 
         # -------------------------
@@ -126,40 +123,6 @@ async def predict(data: EngineData):
             maintenance_action = "Immediate inspection required"
 
         # -------------------------
-        # Time to Failure Window
-        # -------------------------
-        time_to_failure = {
-            "min": max(int(rul * 0.85), 0),
-            "max": max(int(rul * 1.15), 0)
-        }
-
-        # -------------------------
-        # Cost Estimation (USD)
-        # -------------------------
-        maintenance_cost = {
-            "preventive": 12000,
-            "reactive": 48000,
-            "savings": 36000
-        }
-
-        # -------------------------
-        # Degradation History
-        # -------------------------
-        rul_history = [
-            round(max(rul + i * 5, 0), 2)
-            for i in range(10, -1, -1)
-        ]
-
-        # -------------------------
-        # Top Sensor Contributions (SHAP-lite)
-        # -------------------------
-        top_sensors = [
-            {"sensor": "T24", "impact": 0.32},
-            {"sensor": "Nf", "impact": 0.21},
-            {"sensor": "PCNfR", "impact": 0.17}
-        ]
-
-        # -------------------------
         # Final Response
         # -------------------------
         return {
@@ -170,11 +133,27 @@ async def predict(data: EngineData):
             "risk_score": risk_score,
             "confidence": confidence,
             "maintenance_action": maintenance_action,
-            "time_to_failure": time_to_failure,
-            "maintenance_cost": maintenance_cost,
-            "top_sensors": top_sensors,
-            "rul_history": rul_history
+            "time_to_failure": {
+                "min": max(int(rul * 0.85), 0),
+                "max": max(int(rul * 1.15), 0)
+            },
+            "maintenance_cost": {
+                "preventive": 12000,
+                "reactive": 48000,
+                "savings": 36000
+            },
+            "rul_history": [
+                round(max(rul + i * 5, 0), 2)
+                for i in range(10, -1, -1)
+            ],
+            "top_sensors": [
+                {"sensor": "T24", "impact": 0.32},
+                {"sensor": "Nf", "impact": 0.21},
+                {"sensor": "PCNfR", "impact": 0.17}
+            ]
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))

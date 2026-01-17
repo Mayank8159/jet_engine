@@ -7,6 +7,7 @@ import EngineInput from "../input/EngineInput"
 import SensorTextarea from "../input/SensorTextarea"
 import { predictRUL } from "@/lib/api"
 import { PredictionResult } from "@/types/prediction"
+import { parseSensorCSV } from "@/utils/parseCSV"
 
 export default function SingleEngine() {
   const [engineId, setEngineId] = useState("")
@@ -16,32 +17,38 @@ export default function SingleEngine() {
 
   const handlePredict = async () => {
     if (!sensorData.trim()) {
-      alert("Please enter sensor data (30×24) to predict!")
+      alert("Please enter sensor data (30×24)")
       return
     }
 
     setLoading(true)
+
     try {
-      const dataWindow: number[][] = sensorData
-        .trim()
-        .split("\n")
-        .map((line) => line.trim().split(/\s+/).map(Number))
+      // ✅ CORRECT PARSING (FIXES 30×1 BUG)
+      const dataWindow = parseSensorCSV(sensorData)
+
+      console.log("Parsed shape:", dataWindow.length, dataWindow[0].length)
 
       const result = await predictRUL(dataWindow, engineId || undefined)
       setPrediction(result)
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
-      alert("Prediction failed. Check backend logs.")
+      alert(err.message || "Prediction failed")
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   return (
     <div className="space-y-6">
       <GlassCard>
-        <h1 className="text-2xl font-bold mb-4">Single Engine Predictive Dashboard</h1>
+        <h1 className="text-2xl font-bold mb-4">
+          Single Engine Predictive Dashboard
+        </h1>
+
         <EngineInput engineId={engineId} setEngineId={setEngineId} />
         <SensorTextarea raw={sensorData} setRaw={setSensorData} />
+
         <button
           onClick={handlePredict}
           disabled={loading}
@@ -53,16 +60,23 @@ export default function SingleEngine() {
 
       {prediction && (
         <GlassCard>
-          <h2 className="text-xl font-bold mb-2">Engine: {engineId || "Unknown"}</h2>
+          <h2 className="text-xl font-bold mb-2">
+            Engine: {engineId || "Unknown"}
+          </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* RUL & Health */}
             <div className="space-y-2">
-              <p className="text-sm text-gray-300">Remaining Useful Life (RUL)</p>
-              <p className="text-3xl font-bold">{prediction.predicted_rul} cycles</p>
+              <p className="text-sm text-gray-300">
+                Remaining Useful Life (RUL)
+              </p>
+              <p className="text-3xl font-bold">
+                {prediction.predicted_rul} cycles
+              </p>
 
               <p className="text-sm text-gray-300 mt-2">Health</p>
-              <p className="text-xl font-semibold">{prediction.health_percent}%</p>
+              <p className="text-xl font-semibold">
+                {prediction.health_percent}%
+              </p>
 
               <span
                 className={`inline-block mt-2 px-3 py-1 rounded-full text-sm font-semibold ${
@@ -83,14 +97,14 @@ export default function SingleEngine() {
               )}
             </div>
 
-            {/* Degradation Chart */}
-            <div className="col-span-1">
-              <p className="text-sm text-gray-300 mb-1">Degradation Trend</p>
+            <div>
+              <p className="text-sm text-gray-300 mb-1">
+                Degradation Trend
+              </p>
               <MiniRULChart rulHistory={prediction.rul_history} />
             </div>
           </div>
 
-          {/* Additional Metrics */}
           <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-300">
             <div>
               <p>Risk Score</p>
@@ -106,9 +120,10 @@ export default function SingleEngine() {
             </div>
           </div>
 
-          {/* Top Sensors */}
           <div className="mt-4">
-            <p className="text-sm text-gray-300 mb-1">Top Sensor Impacts</p>
+            <p className="text-sm text-gray-300 mb-1">
+              Top Sensor Impacts
+            </p>
             <ul className="list-disc list-inside">
               {prediction.top_sensors.map((s, i) => (
                 <li key={i}>

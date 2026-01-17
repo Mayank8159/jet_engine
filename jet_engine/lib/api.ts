@@ -5,12 +5,30 @@ interface PredictRULRequest {
   data_window: number[][]
 }
 
+/** 🔒 Converts null / undefined / NaN → 0 */
+function sanitizeWindow(window: any[][]): number[][] {
+  return window.map(row =>
+    row.map(value => {
+      const num = Number(value)
+      return Number.isFinite(num) ? num : 0
+    })
+  )
+}
+
 export async function predictRUL(
-  dataWindow: number[][],
+  dataWindow: any[][],
   engineId?: string
 ): Promise<PredictionResult> {
-  const body: PredictRULRequest = { data_window: dataWindow }
-  if (engineId) body.engineId = engineId
+
+  // ✅ sanitize BEFORE sending
+  const safeWindow = sanitizeWindow(dataWindow)
+
+  const body: PredictRULRequest = {
+    data_window: safeWindow,
+    ...(engineId && { engineId }),
+  }
+
+  console.log("🚀 Sending payload:", body) // DEBUG (remove later)
 
   const res = await fetch("http://127.0.0.1:8000/predict", {
     method: "POST",

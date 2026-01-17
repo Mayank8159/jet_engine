@@ -45,21 +45,36 @@ export default function Page() {
   const [showFleet, setShowFleet] = useState(false)
 
   return (
-    <main className="min-h-screen p-6 bg-gradient-to-br from-black to-slate-900 text-white space-y-6">
-      <h1 className="text-3xl font-bold">Jet Engine Predictive Dashboard</h1>
+    <main className="relative min-h-screen p-6 text-white flex flex-col gap-6">
+      {/* Background Image + Blur Overlay */}
+      <div className="absolute inset-0">
+        <img
+          src="/bgmain.jpg" // replace with your image path
+          alt="Jet Engine Background"
+          className="w-full h-full object-cover brightness-90 blur-sm"
+        />
+        <div className="absolute inset-0 bg-black/40"></div>
+      </div>
 
-      <button
-        onClick={() => setShowFleet(!showFleet)}
-        className="py-2 px-4 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 font-bold hover:scale-105 transition-transform"
-      >
-        {showFleet ? "Show Single Engine View" : "Show Fleet View"}
-      </button>
+      {/* Content */}
+      <div className="relative z-10 flex flex-col gap-6 max-w-7xl mx-auto">
+        <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold">Jet Engine Predictive Dashboard</h1>
 
-      {showFleet ? (
-        <FleetDashboard fleet={fleet} />
-      ) : (
-        <SingleEngine />
-      )}
+        <button
+          onClick={() => setShowFleet(!showFleet)}
+          className="py-2 px-4 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 font-bold hover:scale-105 transition-transform w-full md:w-auto"
+        >
+          {showFleet ? "Show Single Engine View" : "Show Fleet View"}
+        </button>
+
+        <div className="w-full">
+          {showFleet ? (
+            <FleetDashboard fleet={fleet} />
+          ) : (
+            <SingleEngine />
+          )}
+        </div>
+      </div>
     </main>
   )
 }
