@@ -1,5 +1,5 @@
 export async function predictRUL(dataWindow: number[][], engineId?: string) {
-  const response = await fetch("http://127.0.0.1:8000/predict", {
+  const response = await fetch("https://jet-engine.onrender.com/predict", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ data: dataWindow }), // Matches main.py schema
