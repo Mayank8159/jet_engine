@@ -2,7 +2,8 @@ import os
 import numpy as np
 import tensorflow as tf
 import joblib
-from fastapi import FastAPI, HTTPException
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
@@ -12,7 +13,37 @@ TIME_STEPS = 30
 NUM_FEATURES = 24
 MAX_RUL = 125.0
 
-app = FastAPI(title="AeroGuard Intelligent API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # --- Startup: Load models and scalers ---
+    # Using a dictionary in app.state for cleaner access
+    app.state.model = None
+    app.state.scaler = None
+    
+    try:
+        # Paths relative to the root or current working directory
+        model_path = os.path.join("models", "lstm_rul_model.h5")
+        scaler_path = os.path.join("models", "scaler.pkl")
+        
+        if os.path.exists(model_path):
+            # compile=False saves memory on startup
+            app.state.model = tf.keras.models.load_model(model_path, compile=False)
+            print("✅ TensorFlow Model Loaded")
+            
+        if os.path.exists(scaler_path):
+            app.state.scaler = joblib.load(scaler_path)
+            print("✅ Scikit-learn Scaler Loaded")
+            
+        print("🚀 Backend Assets Ready for Requests")
+    except Exception as e:
+        print(f"❌ Startup Error: {e}")
+        
+    yield
+    # --- Shutdown: Clear memory ---
+    app.state.model = None
+    app.state.scaler = None
+
+app = FastAPI(title="AeroGuard Intelligent API", lifespan=lifespan)
 
 # Enable CORS for Next.js communication
 app.add_middleware(
@@ -23,42 +54,37 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global variables for model/scaler
-model = None
-scaler = None
-
-@app.on_event("startup")
-async def load_resources():
-    global model, scaler
-    try:
-        model_path = os.path.join("models", "lstm_rul_model.h5")
-        scaler_path = os.path.join("models", "scaler.pkl")
-        if os.path.exists(model_path):
-            model = tf.keras.models.load_model(model_path, compile=False)
-        if os.path.exists(scaler_path):
-            scaler = joblib.load(scaler_path)
-        print("✅ Backend Assets Loaded Successfully")
-    except Exception as e:
-        print(f"❌ Startup Error: {e}")
-
 class EngineData(BaseModel):
     data: List[List[float]]
 
+@app.get("/")
+async def health_check():
+    return {"status": "online", "model_loaded": app.state.model is not None}
+
 @app.post("/predict")
 async def predict(request: EngineData):
+    # Retrieve from app.state
+    model = app.state.model
+    scaler = app.state.scaler
+
     if model is None:
-        raise HTTPException(status_code=503, detail="Model not loaded")
+        raise HTTPException(status_code=503, detail="Model not loaded on server")
 
     try:
         x = np.array(request.data, dtype=np.float32)
 
-        # Validation for 422/400 errors
+        # Validation for input shape
         if x.shape != (TIME_STEPS, NUM_FEATURES):
-            raise HTTPException(status_code=400, detail=f"Expected (30,24), got {x.shape}")
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Expected shape (30,24), but received {x.shape}"
+            )
 
         # Scale and Predict
         x_scaled = scaler.transform(x) if scaler else x
         x_reshaped = np.expand_dims(x_scaled, axis=0)
+        
+        # verbose=0 prevents log spam during prediction
         y_pred = model.predict(x_reshaped, verbose=0)
         
         rul = max(0, min(float(y_pred[0][0]), MAX_RUL))
@@ -72,7 +98,6 @@ async def predict(request: EngineData):
         else:
             status, grade, action = "Critical", "C", "IMMEDIATE INSPECTION REQUIRED"
 
-        # COMPLETE RESPONSE OBJECT (Fixes the .map undefined error)
         return {
             "predicted_rul": round(rul, 2),
             "health_percent": round(health_percent, 1),
@@ -89,4 +114,4 @@ async def predict(request: EngineData):
             ]
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
